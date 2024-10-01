@@ -1,0 +1,175 @@
+import pygame
+import sys
+import math
+import random
+
+# Constants
+WIDTH, HEIGHT = 800, 600
+FPS = 60
+PLAYER_SPEED = 5
+SENSITIVITY = 0.1
+BULLET_SPEED = 10
+ENEMY_SPEED = 2
+MAX_HEALTH = 100
+PLAYER_RADIUS = 10
+ENEMY_RADIUS = 10
+BULLET_RADIUS = 5
+
+# Initialize Pygame
+pygame.init()
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("FPS with Textures, Sounds, and Music")
+clock = pygame.time.Clock()
+
+# Load images
+player_image = pygame.image.load("player.png").convert_alpha()
+enemy_image = pygame.image.load("enemy.png").convert_alpha()
+bullet_image = pygame.image.load("bullet.png").convert_alpha()
+
+# Scale images
+player_image = pygame.transform.scale(player_image, (PLAYER_RADIUS * 2, PLAYER_RADIUS * 2))
+enemy_image = pygame.transform.scale(enemy_image, (ENEMY_RADIUS * 2, ENEMY_RADIUS * 2))
+bullet_image = pygame.transform.scale(bullet_image, (BULLET_RADIUS * 2, BULLET_RADIUS * 2))
+
+# Load sound effects
+shoot_sound = pygame.mixer.Sound("shoot.wav")
+enemy_death_sound = pygame.mixer.Sound("enemy_death.wav")
+
+# Load background music
+pygame.mixer.music.load("background.mp3")  # or "background.ogg"
+pygame.mixer.music.play(-1)  # Loop indefinitely
+
+# Player settings
+player_pos = [WIDTH // 2, HEIGHT // 2]
+player_angle = 0
+player_movement = [0, 0]
+player_health = MAX_HEALTH
+
+# Bullet settings
+bullets = []
+
+# Enemy settings
+enemies = [[random.randint(0, WIDTH), random.randint(0, HEIGHT)]]
+
+def handle_input():
+    global player_angle
+    keys = pygame.key.get_pressed()
+    
+    # Move Forward/Backward
+    if keys[pygame.K_w]:
+        player_movement[0] += PLAYER_SPEED * math.cos(math.radians(player_angle))
+        player_movement[1] += PLAYER_SPEED * math.sin(math.radians(player_angle))
+    if keys[pygame.K_s]:
+        player_movement[0] -= PLAYER_SPEED * math.cos(math.radians(player_angle))
+        player_movement[1] -= PLAYER_SPEED * math.sin(math.radians(player_angle))
+
+    # Rotate Left/Right
+    if keys[pygame.K_a]:
+        player_angle -= 2
+    if keys[pygame.K_d]:
+        player_angle += 2
+
+    # Shoot bullet
+    if keys[pygame.K_SPACE]:
+        shoot_bullet()
+
+def shoot_bullet():
+    bullet_dx = BULLET_SPEED * math.cos(math.radians(player_angle))
+    bullet_dy = BULLET_SPEED * math.sin(math.radians(player_angle))
+    bullets.append([player_pos[0], player_pos[1], bullet_dx, bullet_dy])
+    shoot_sound.play()  # Play shoot sound
+
+def update_player():
+    global player_pos
+    new_pos = [player_pos[0] + player_movement[0], player_pos[1] + player_movement[1]]
+
+    # Collision detection with screen boundaries
+    if (PLAYER_RADIUS <= new_pos[0] <= WIDTH - PLAYER_RADIUS and
+        PLAYER_RADIUS <= new_pos[1] <= HEIGHT - PLAYER_RADIUS):
+        player_pos[0] = new_pos[0]
+        player_pos[1] = new_pos[1]
+
+    # Reset movement
+    player_movement[0] = 0
+    player_movement[1] = 0
+
+def update_bullets():
+    global player_health
+    for bullet in bullets:
+        bullet[0] += bullet[2]
+        bullet[1] += bullet[3]
+
+    # Remove bullets that go off screen
+    bullets[:] = [bullet for bullet in bullets if 0 < bullet[0] < WIDTH and 0 < bullet[1] < HEIGHT]
+
+    # Check for collisions with enemies
+    for bullet in bullets[:]:
+        for enemy in enemies[:]:
+            if math.hypot(bullet[0] - enemy[0], bullet[1] - enemy[1]) < BULLET_RADIUS + ENEMY_RADIUS:  # Bullet hits enemy
+                enemies.remove(enemy)
+                bullets.remove(bullet)
+                enemy_death_sound.play()  # Play enemy death sound
+                break
+
+def update_enemies():
+    global player_health
+    for enemy in enemies:
+        # Move towards the player
+        angle_to_player = math.atan2(player_pos[1] - enemy[1], player_pos[0] - enemy[0])
+        enemy[0] += ENEMY_SPEED * math.cos(angle_to_player)
+        enemy[1] += ENEMY_SPEED * math.sin(angle_to_player)
+
+        # Check for collision with player
+        if math.hypot(player_pos[0] - enemy[0], player_pos[1] - enemy[1]) < PLAYER_RADIUS + ENEMY_RADIUS:
+            player_health -= 1  # Decrease player health
+            enemies.remove(enemy)  # Remove enemy after hitting player
+
+def draw():
+    screen.fill((0, 0, 0))  # Clear screen
+
+    # Draw player
+    rotated_player = pygame.transform.rotate(player_image, -player_angle)
+    player_rect = rotated_player.get_rect(center=(player_pos[0], player_pos[1]))
+    screen.blit(rotated_player, player_rect.topleft)
+
+    # Draw bullets
+    for bullet in bullets:
+        screen.blit(bullet_image, (bullet[0] - BULLET_RADIUS, bullet[1] - BULLET_RADIUS))
+
+    # Draw enemies
+    for enemy in enemies:
+        screen.blit(enemy_image, (enemy[0] - ENEMY_RADIUS, enemy[1] - ENEMY_RADIUS))
+
+    # Display player health
+    font = pygame.font.Font(None, 36)
+    health_text = font.render(f"Health: {player_health}", True, (255, 255, 255))
+    screen.blit(health_text, (10, 10))
+
+    pygame.display.flip()  # Update display
+
+def main():
+    global player_pos
+
+    # Mouse settings
+    pygame.mouse.set_visible(False)
+    pygame.event.set_grab(True)
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+        # Handle mouse motion
+        mouse_dx, mouse_dy = pygame.mouse.get_rel()
+        player_angle -= mouse_dx * SENSITIVITY
+
+        handle_input()
+        update_player()
+        update_bullets()
+        update_enemies()
+        draw()
+        clock.tick(FPS)
+
+if __name__ == "__main__":
+    main()
